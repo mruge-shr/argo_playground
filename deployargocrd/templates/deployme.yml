@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: test-deployment-helm
+spec:
+  entrypoint: thethings
+  serviceAccountName: deployment-supervisor
+  templates:
+  - name: thethings
+    steps:
+    - - name: makedb
+        template: db
+    - - name: create-config
+        template: create-config
+        arguments:
+          parameters:
+            - name: helm-release
+              value: |
+                {{"{{"}}steps.makedb.outputs.parameters.helm-release{{"}}"}}
+    - - name: deployapp
+        template: app
+        arguments:
+          parameters:
+          - name: mongo-url
+            value: |
+              {{"{{"}}steps.create-config.outputs.parameters.mongo-url{{"}}"}}
+          - name: mongo-user
+            value: |
+              {{"{{"}}steps.create-config.outputs.parameters.mongo-user{{"}}"}}
+          - name: mongo-pass
+            value: |
+              {{"{{"}}steps.create-config.outputs.parameters.mongo-pass{{"}}"}}
+  - name: app
+    inputs:
+      parameters:
+      - name: mongo-url
+      - name: mongo-user
+      - name: mongo-pass
+    container:
+      image: docker/whalesay:latest
+      command: [cowsay]
+      args: 
+        - '{{"{{"}}inputs.parameters.mongo-url{{"}}"}}\n{{"{{"}}inputs.parameters.mongo-user{{"}}"}}\n{{"{{"}}inputs.parameters.mongo-pass{{"}}"}}'
+  - name: db
+    script:
+      image: alpine/helm
+      command: [ash]
+      source: |
+        helm install --repo=https://charts.bitnami.com/bitnami --generate-name --wait mongodb | sed -n -e 's/^NAME: \(.*\)$/\1/p' > /tmp/release_name
+    outputs:
+      parameters:
+      - name: helm-release
+        valueFrom:
+          path: /tmp/release_name
+  - name: create-config
+    inputs:
+      parameters:
+      - name: helm-release
+    script:
+      image: bitnami/kubectl:latest
+      command: [bash]
+      source: | 
+        echo '{{"{{"}}inputs.parameters.helm-release{{"}}"}}' >> /tmp/mongo.url
+        echo "root" >> /tmp/mongo.user
+        kubectl get secret --namespace default {{"{{"}}inputs.parameters.helm-release{{"}}"}} -o jsonpath="{.data.mongodb-root-password}" | base64 -d >> /tmp/mongo.pass
+    outputs:
+      parameters:
+        - name: mongo-url
+          valueFrom:
+            path: /tmp/mongo.url
+        - name: mongo-user
+          valueFrom:
+            path: /tmp/mongo.user
+        - name: mongo-pass
+          valueFrom:
+            path: /tmp/mongo.pass
+
+
+
