@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: test-deployment
+spec:
+  entrypoint: thethings
+  templates:
+  - name: thethings
+    steps:
+    - - name: makedb
+        template: mongo
+      - name: deployapp
+        template: app
+  - name: mongo
+    container:
+      image: docker/whalesay
+      command: [cowsay]
+      args: ["hello world"]  
+  - name: app
+    container:
+      image: docker/whalesay
+      command: [cowsay]
+      args: ["hello world"] 

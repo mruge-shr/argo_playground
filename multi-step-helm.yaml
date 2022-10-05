@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: test-deployment-helm
+spec:
+  entrypoint: thethings
+  serviceAccountName: deployment-supervisor
+  templates:
+  - name: thethings
+    steps:
+    - - name: makedb
+        template: db
+      - name: deployapp
+        template: app
+  - name: app
+    container:
+      image: alpine/helm
+      command: [helm]
+      args: ["install","--repo=https://charts.bitnami.com/bitnami","--generate-name", "nginx"]  
+  - name: db
+    container:
+      image: alpine/helm
+      command: [helm]
+      args: ["install","--repo=https://charts.bitnami.com/bitnami","--generate-name", "--wait", "mongodb"]  
